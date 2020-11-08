@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
     }
 
   // Create the socket
-  socketfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  socketfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (socketfd < 0)
     showError("Error while creating the socket");
 		
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
     showError("ERROR while binding");
 
   // Listen
-  listen(socketfd, 10);
+  listen(socketfd, 2);
 
   // Infinite loop
   while (1)

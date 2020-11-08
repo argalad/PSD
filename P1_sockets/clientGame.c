@@ -189,6 +189,7 @@ int main(int argc, char *argv[])
   unsigned int endOfGame;		/** Flag to control the end of the game */
   tString playerName;			/** Name of the player */
   unsigned int code;			/** Code */
+  int msgLength;                        /** Length of the message */
 
 
   // Check arguments!
@@ -201,12 +202,12 @@ int main(int argc, char *argv[])
 
   // Get the server address
   serverIP = argv[1];
-
+  
   // Get the port
   port = atoi(argv[2]);
 
   // Create socket
-  socketfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  socketfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (socketfd < 0)
     showError("ERROR while creating the socket");
   
@@ -236,10 +237,14 @@ int main(int argc, char *argv[])
 
     }while (strlen(playerName) <= 2);
 
-		
+  // Send playerName to server side
+  msgLength = send (socketfd, playerName, strlen (playerName), 0);
 
-  // Init
+  // Check the number of bytes sent
+  if (msgLength < 0)
+    showError ("ERROR while writing to the socket");
 		
+  // Init
 
   // Game starts
   printf ("Game starts!\n\n");
@@ -247,8 +252,8 @@ int main(int argc, char *argv[])
   // While game continues...
   while (!endOfGame)
     {
-		
-		
+
+
 		
 		
 		
