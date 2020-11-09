@@ -35,7 +35,7 @@ void clearDeck (tDeck *deck)
 
   for (i=0; i<DECK_SIZE; i++)
     {
-      deck->cards[i] = UNSET_CARD;2
+      deck->cards[i] = UNSET_CARD;
     }
 }
 
