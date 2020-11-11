@@ -46,6 +46,11 @@ void showError (const char *msg)
 
 int main (int argc, char *argv[])
 {
+  tSession session;                       /** Session of this game */
+  tPlayer currentPlayer;                  /** Current player */
+  int endOfGame;                          /** Flag to control the end of the game*/
+  unsigned int card;                      /** Current card */
+  unsigned int code, codeRival;           /** Codes for the active player and the rival */
   int socketfd;				                    /** Socket descriptor */
   struct sockaddr_in serverAddress;	      /** Server address structure */
   unsigned int port;			                /** Listening port */
@@ -56,7 +61,6 @@ int main (int argc, char *argv[])
   unsigned int clientLength;		          /** Length of client structure */
   tThreadArgs *threadArgs; 		            /** Thread parameters */
   pthread_t threadID;			                /** Thread ID */
-  tString message;
   int msgLength;
 
   // Seed
@@ -92,10 +96,11 @@ int main (int argc, char *argv[])
     sizeof (serverAddress)) < 0)
     showError ("ERROR while binding");
 
+  /***************************************** 1 *****************************************/
   // Listen
   listen (socketfd, 2);
 
-  // Get length of Player 1 structure
+  // Get length of player 1 structure
   clientLength = sizeof (player1Address);
 
   // Accept
@@ -105,7 +110,7 @@ int main (int argc, char *argv[])
   else
     fprintf(stdout, "Player 1 is connected!\n");
 
-  // Get length of Player 2 structure
+  // Get length of player 2 structure
   clientLength = sizeof (player2Address);
 
   // Accept
@@ -115,25 +120,220 @@ int main (int argc, char *argv[])
   else
     fprintf (stdout, "Player 2 is connected!\n");
 
-  // Init and read Player 1 name
-  memset (message, 0, STRING_LENGTH);
-  msgLength = recv (socketPlayer1, message, STRING_LENGTH - 1, 0);
+  /***************************************** 2 *****************************************/
+  // Init and read player 1 name
+  memset (session.player1Name, 0, STRING_LENGTH);
+  msgLength = recv (socketPlayer1, session.player1Name, STRING_LENGTH - 1, 0);
   
   // Check read bytes
   if (msgLength < 0)
     showError ("ERROR while reading name of player 1");
   else
-    printf ("Name of player 1 received: %s\n", message);
+    printf ("Name of player 1 received: %s\n", session.player1Name);
 
-  // Init and read Player 2 name
-  memset (message, 0, STRING_LENGTH);
-  msgLength = recv (socketPlayer2, message, STRING_LENGTH - 1, 0);
+  // Init and read player 2 name
+  memset (session.player2Name, 0, STRING_LENGTH);
+  msgLength = recv (socketPlayer2, session.player2Name, STRING_LENGTH - 1, 0);
   
   // Check read bytes
   if (msgLength < 0)
     showError ("ERROR while reading name of player 2");
   else
-    printf ("Name of player 2 received: %s\n", message);
+    printf ("Name of player 2 received: %s\n", session.player2Name);
+
+  /***************************************** 3 *****************************************/
+  // Initialize and print game session
+  initSession (&session);
+  printSession (&session);
+  endOfGame = FALSE;
+  currentPlayer = player1;
+
+  /***************************************** 4 *****************************************/
+  while (!endOfGame)
+  {
+    if (currentPlayer == player1)
+    {
+      // a. Send TURN_BET and stack to player 1
+      code = TURN_BET;
+      msgLength = send (socketPlayer1, &code, sizeof(code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player.");
+
+      code = session.player1Stack;
+      msgLength = send (socketPlayer1, &code, sizeof(code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing stack to player.");
+
+      // b. Player 1 bet
+      while (code != TURN_BET_OK)
+      {
+        // Read
+        msgLength = recv (socketPlayer1, &session.player1Bet, sizeof(session.player1Bet), 0);
+        if (msgLength < 0)
+          showError ("ERROR while receiving player's bet.");
+
+        if (session.player1Bet > 0 && session.player1Bet <= session.player1Stack 
+          && session.player1Bet < MAX_BET)
+          code = TURN_BET_OK;
+        else
+          code = TURN_BET;
+
+        // Send
+        msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+        if (msgLength < 0)
+          showError ("ERROR while writing code to player.");
+      }
+
+      currentPlayer = getNextPlayer(currentPlayer);
+    }
+
+    if (currentPlayer == player2)
+    {
+      /// c. Send TURN_BET and stack to player 2
+      code = TURN_BET;
+      msgLength = send (socketPlayer2, &code, sizeof(code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player.");
+
+      code = session.player2Stack;
+      msgLength = send (socketPlayer2, &code, sizeof(code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing stack to player.");
+
+      while (code != TURN_BET_OK)
+      {
+        // Read
+        msgLength = recv (socketPlayer2, &session.player2Bet, sizeof(session.player2Bet), 0);
+        if (msgLength < 0)
+          showError ("ERROR while receiving player's bet.");
+
+        if (session.player2Bet > 0 && session.player2Bet <= session.player2Stack 
+          && session.player2Bet < MAX_BET)
+          code = TURN_BET_OK;
+        else
+          code = TURN_BET;
+
+        // Send
+        msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+        if (msgLength < 0)
+          showError ("ERROR while writing code to player.");
+      }
+
+      currentPlayer = getNextPlayer(currentPlayer);
+    }
+    
+    // d. Start game
+    if (currentPlayer == player1)
+    {
+      // Get player 1 deck
+      for (int i = 0; i < 2; i++)
+      {
+        session.player1Deck.cards[i] = getRandomCard (&session.gameDeck);
+        session.player1Deck.numCards++;
+      }
+      // i. ii.
+      // Send deck to both players
+      tDeck deck = session.player1Deck;
+      msgLength = send (socketPlayer1, &deck, sizeof (deck), 0);
+      if (msgLength < 0)
+        showError ("ERROR while sending deck to player 1.");
+      msgLength = send (socketPlayer2, &deck, sizeof (deck), 0);
+      if (msgLength < 0)
+        showError ("ERROR while sending deck to player 2.");
+
+      // Get player 1 points
+      code = calculatePoints (&session.player1Deck);
+
+      // Send points to both players
+      msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while sending points to player 1.");
+      msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while sending points to player 2.");
+
+      // Send TURN_PLAY to player 1 
+      code = TURN_PLAY;
+      msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player 1.");
+
+      // Send TURN_PLAY_WAIT to player 2
+      code = TURN_PLAY_WAIT;
+      msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player 2.");
+
+      // Answer from player 1 choice: HIT or STAND
+      msgLength = recv (socketPlayer1, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while receiving player 1 option.");
+
+      // iii.
+      while (code == TURN_PLAY_HIT)
+      {
+        session.player1Deck.cards[session.player1Deck.numCards++] = getRandomCard (&session.gameDeck);
+        code = calculatePoints (&session.player1Deck);
+
+        // Send deck to both players
+        deck = session.player1Deck;
+        msgLength = send (socketPlayer1, &deck, sizeof (deck), 0);
+        if (msgLength < 0)
+          showError ("ERROR while sending deck to player 1.");
+        msgLength = send (socketPlayer2, &deck, sizeof (deck), 0);
+        if (msgLength < 0)
+          showError ("ERROR while sending deck to player 2.");
+
+        // Send points to both players
+        msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+        if (msgLength < 0)
+          showError ("ERROR while sending points to player 1.");
+        msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+        if (msgLength < 0)
+          showError ("ERROR while sending points to player 2.");
+
+        // Check player points
+        if (code > 21)
+        {
+          code = TURN_PLAY_OUT;
+          msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+          if (msgLength < 0)
+            showError ("ERROR while writing code to player.");
+        }
+        else
+        {
+          code = TURN_PLAY;
+          msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+          if (msgLength < 0)
+            showError ("ERROR while writing code to player.");
+
+          code = TURN_PLAY_WAIT;
+          msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+          if (msgLength < 0)
+            showError ("ERROR while writing code to player.");
+
+          msgLength = recv (socketPlayer1, &code, sizeof (code), 0);
+          if (msgLength < 0)
+            showError ("ERROR while receiving player 1 option.");
+        }
+      }
+
+      code = TURN_PLAY_WAIT;
+      msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player 1.");
+
+      code = TURN_PLAY_RIVAL_DONE;
+      msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player 2.");
+
+    }
+
+    while(1){};
+  }
+
+
 
   // Infinite loop
   while (1)

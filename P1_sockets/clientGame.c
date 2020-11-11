@@ -238,13 +238,12 @@ int main(int argc, char *argv[])
   }while (strlen(playerName) <= 2);
 
   // Send playerName to server side
-  msgLength = send (socketfd, playerName, strlen (playerName), 0);
-
-  // Check the number of bytes sent
+  msgLength = send (socketfd, &playerName, strlen (playerName), 0);
   if (msgLength < 0)
-    showError ("ERROR while writing to the socket");
+    showError ("ERROR while writing to the server");
 
   // Init
+  endOfGame = FALSE;
 
   // Game starts
   printf ("Game starts!\n\n");
@@ -252,13 +251,83 @@ int main(int argc, char *argv[])
   // While game continues...
   while (!endOfGame)
   {
+    // Read stack
+    msgLength = recv (socketfd, &code, sizeof (code), 0);
+    if (msgLength < 0)
+      showError ("ERROR while reading the stack.");
 
+      // Read turn bet
+    msgLength = recv (socketfd, &code, sizeof (code), 0);
+    if (msgLength < 0)
+      showError ("ERROR while reading the turn bet.");
 
+    printf ("Your stack is %d chips\n", code);
+    printf ("The bet must be >0 and <=%d\n", code);
 
+    // While bet is not OK
+    while (code != TURN_BET_OK)
+    {    
+      code = readBet ();
 
+      msgLength = send (socketfd, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing to the server");
 
+      msgLength = recv (socketfd, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while reading the code.");
+    }
+    
+    do
+    {
+      tDeck deck;
+      msgLength = recv (socketfd, &deck, sizeof (deck), 0);
+      if (msgLength < 0)
+        showError ("ERROR while reading deck.");
 
+      unsigned int points;
+      msgLength = recv (socketfd, &points, sizeof (points), 0);
+      if (msgLength < 0)
+        showError ("ERROR while reading points.");
 
+    // Read current player status
+      msgLength = recv (socketfd, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while reading status.");
+
+      if (code == TURN_PLAY)
+      {
+        printf ("Player has %d points\n", points);
+        printf ("Deck: ");
+        printDeck (&deck);
+        code = readOption ();
+        if (code == 0)
+          code = TURN_PLAY_STAND;
+        else
+          code = TURN_PLAY_HIT;
+        msgLength = send (socketfd, &code, sizeof (code), 0);
+        if (msgLength < 0)
+          showError ("ERROR while writing option to the server");
+      }
+      else if (code == TURN_PLAY_OUT)
+      {
+        printf ("Player is OUT!!!");
+        printf (" %d points\n", points);
+        printf ("Deck: ");
+        printDeck (&deck);
+      }
+      else if (code == TURN_PLAY_WAIT)
+      {
+        printf ("Rival has %d points\n", points);
+        printf ("Rival's deck: ");
+        printDeck (&deck);
+      }
+
+    } while (code == TURN_PLAY || code == TURN_PLAY_WAIT || code == TURN_PLAY_HIT);
+    
+        
+
+    while(1){};
   }
 
   // Close socket
