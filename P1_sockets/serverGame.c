@@ -27,7 +27,6 @@ void showError (const char *msg)
 
 //   // Receive player 2 info
 
-
 //   // Init...
 //   endOfGame = FALSE;
 
@@ -202,7 +201,7 @@ int main (int argc, char *argv[])
         showError ("ERROR while receiving player's bet.");
 
       if (session.player2Bet > 0 && session.player2Bet <= session.player2Stack 
-        && session.player2Bet < MAX_BET)
+	  && session.player2Bet <= MAX_BET)
         code = TURN_BET_OK;
       else
         code = TURN_BET;
