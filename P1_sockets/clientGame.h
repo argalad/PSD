@@ -38,4 +38,6 @@ unsigned int readBet ();
  */
 unsigned int readOption ();
 
+void receive_deck (int socketfd, tDeck *deck);
+
 
