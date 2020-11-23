@@ -17,15 +17,27 @@ typedef struct threadArgs{
 void showError(const char *msg);
 
 /**
- * Function that executes a turn
- * @param activePlayer Player that plays the turn
- * @param inactivePlayer Player that waits the turn
- * @param session Session of the game
+ * Function that executes a turn.
+ * @param activePlayer Player that plays the turn.
+ * @param inactivePlayer Player that waits the turn.
+ * @param session Session of the game.
+ * @param deck Active player's deck.
 */
 void turn (int activePlayer, int inactivePlayer, tSession *session, tDeck *deck);
 
+/**
+ * Function that manages player's bet.
+ * @param socketPlayer Player that will manage its bet.
+ * @param Stack Current player's stack.
+ * @param bet Current player's bet.
+*/
 void manage_bet (int socketPlayer, unsigned int *stack, unsigned int *bet);
 
+/**
+ * Function that sends a deck to a player.
+ * @param socketPlayer Player that will receive the deck.
+ * @param deck Deck to send.
+*/
 void send_deck (int socketPlayer, tDeck *deck);
 
 /**

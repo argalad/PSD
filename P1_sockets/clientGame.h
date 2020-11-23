@@ -38,6 +38,11 @@ unsigned int readBet ();
  */
 unsigned int readOption ();
 
+/**
+ * Function to receive a deck.
+ * @param socketPlayer Server that will send the deck.
+ * @param deck Deck to receive.
+*/
 void receive_deck (int socketfd, tDeck *deck);
 
 

@@ -7,41 +7,121 @@ void showError (const char *msg)
   exit (0);
 }
 
-/*Descomentar para implementación de threads*/
-// void *threadProcessing(void *threadArgs)
-// {
-//   tSession session;				         /** Session of this game */
-//   int socketPlayer1;				         /** Socket descriptor for player 1 */
-//   int socketPlayer2;				         /** Socket descriptor for player 2 */
-//   tPlayer currentPlayer;			       /** Current player */
-//   int endOfGame;				             /** Flag to control the end of the game*/
-//   unsigned int card;				         /** Current card */
-//   unsigned int code, codeRival;	   /** Codes for the active player and the rival */
+void *threadProcessing(void *threadArgs)
+{
+  tSession session;				         /** Session of this game */
+  int socketPlayer1;				       /** Socket descriptor for player 1 */
+  int socketPlayer2;				       /** Socket descriptor for player 2 */
+  tPlayer currentPlayer;			     /** Current player */
+  int endOfGame;				           /** Flag to control the end of the game*/
+  unsigned int code, codeRival;	   /** Codes for the active player and the rival */
+  int msgLength;                   /** Length of message structure */
 
-//   // Get sockets for players
-//   socketPlayer1 = ((tThreadArgs *) threadArgs)->socketPlayer1;
-//   socketPlayer2 = ((tThreadArgs *) threadArgs)->socketPlayer2;
+  // Get sockets for players
+  socketPlayer1 = ((tThreadArgs *) threadArgs)->socketPlayer1;
+  socketPlayer2 = ((tThreadArgs *) threadArgs)->socketPlayer2;
 
-//   // Receive player 1 info
+  /***************************************** 2 *****************************************/
+  // Init and read player 1 name
+  memset (session.player1Name, 0, STRING_LENGTH);
+  msgLength = recv (socketPlayer1, session.player1Name, STRING_LENGTH - 1, 0);
+  
+  // Check read bytes
+  if (msgLength < 0)
+    showError ("ERROR while reading name of player 1");
+  else
+    printf ("Name of player 1 received: %s\n", session.player1Name);
 
+  // Init and read player 2 name
+  memset (session.player2Name, 0, STRING_LENGTH);
+  msgLength = recv (socketPlayer2, session.player2Name, STRING_LENGTH - 1, 0);
+  
+  // Check read bytes
+  if (msgLength < 0)
+    showError ("ERROR while reading name of player 2");
+  else
+    printf ("Name of player 2 received: %s\n", session.player2Name);
 
-//   // Receive player 2 info
+  /***************************************** 3 *****************************************/
+  // Initialize and print game session
+  initSession (&session);
+  printSession (&session);
+  endOfGame = FALSE;
+  currentPlayer = player1;
 
-//   // Init...
-//   endOfGame = FALSE;
+  /***************************************** 4 *****************************************/
+  while (!endOfGame)
+  {
+    if (currentPlayer == player1)
+    {
+      manage_bet (socketPlayer1, &session.player1Stack, &session.player1Bet);
+      manage_bet (socketPlayer2, &session.player2Stack, &session.player2Bet);
+      turn (socketPlayer1, socketPlayer2, &session, &session.player1Deck);
+      turn (socketPlayer2, socketPlayer1, &session, &session.player2Deck);
+    }
+    else
+    {
+      manage_bet (socketPlayer2, &session.player2Stack, &session.player2Bet);
+      manage_bet (socketPlayer1, &session.player1Stack, &session.player1Bet);
+      turn (socketPlayer2, socketPlayer1, &session, &session.player2Deck);
+      turn (socketPlayer1, socketPlayer2, &session, &session.player1Deck);
+    }
 
-//   while (!endOfGame)
-//   {
+    updateStacks (&session);
 
+    // If player 1 loses
+    if (session.player1Stack == 0)
+    {
+      code = TURN_GAME_LOSE;
+      msgLength = send (socketPlayer1, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player.");
 
-//   }
+      codeRival = TURN_GAME_WIN;
+      msgLength = send (socketPlayer2, &codeRival, sizeof (codeRival), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player.");
 
-//   // Close sockets
-//   close (socketPlayer1);
-//   close (socketPlayer2);
+      endOfGame = TRUE;
 
-//   return (NULL) ;
-// }
+      // Close sockets
+      close (socketPlayer1);
+      close (socketPlayer2);
+      
+    }
+    // If player 2 loses
+    else if (session.player2Stack == 0)
+    {
+      code = TURN_GAME_LOSE;
+      msgLength = send (socketPlayer2, &code, sizeof (code), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player.");
+
+      codeRival = TURN_GAME_WIN;
+      msgLength = send (socketPlayer1, &codeRival, sizeof (codeRival), 0);
+      if (msgLength < 0)
+        showError ("ERROR while writing code to player.");
+
+      endOfGame = TRUE;
+
+      // Close sockets
+      close (socketPlayer1);
+      close (socketPlayer2);
+    }
+    // If game continues
+    else 
+    {
+      currentPlayer = getNextPlayer (currentPlayer);
+      clearDeck (&session.gameDeck);
+      initDeck (&session.gameDeck);
+      clearDeck (&session.player1Deck);
+      clearDeck (&session.player2Deck);
+      printSession (&session);
+    }
+  }
+
+  return (NULL) ;
+}
 
 void send_deck (int socketPlayer, tDeck *deck)
 {
@@ -197,11 +277,6 @@ void turn (int activePlayer, int inactivePlayer, tSession *session, tDeck *deck)
 
 int main (int argc, char *argv[])
 {
-  tSession session;                       /** Session of this game */
-  tPlayer currentPlayer;                  /** Current player */
-  int endOfGame;                          /** Flag to control the end of the game*/
-  unsigned int card;                      /** Current card */
-  unsigned int code, codeRival;           /** Codes for the active player and the rival */
   int socketfd;				                    /** Socket descriptor */
   struct sockaddr_in serverAddress;	      /** Server address structure */
   unsigned int port;			                /** Listening port */
@@ -212,8 +287,6 @@ int main (int argc, char *argv[])
   unsigned int clientLength;		          /** Length of client structure */
   tThreadArgs *threadArgs; 		            /** Thread parameters */
   pthread_t threadID;			                /** Thread ID */
-  int msgLength;
-  unsigned int points;
 
   // Seed
   srand (time (0));
@@ -249,123 +322,41 @@ int main (int argc, char *argv[])
     showError ("ERROR while binding");
 
   /***************************************** 1 *****************************************/
-  // Listen
-  listen (socketfd, 2);
-
-  // Get length of player 1 structure
-  clientLength = sizeof (player1Address);
-
-  // Accept
-  socketPlayer1 = accept (socketfd, (struct sockaddr *) &player1Address, &clientLength);
-  if (socketPlayer1 < 0)
-    showError ("ERROR while accepting player 1");
-  else
-    fprintf(stdout, "Player 1 is connected!\n");
-
-  // Get length of player 2 structure
-  clientLength = sizeof (player2Address);
-
-  // Accept
-  socketPlayer2 = accept (socketfd, (struct sockaddr *) &player2Address, &clientLength);
-  if (socketPlayer2 < 0)
-    showError ("ERROR while accepting player 2");
-  else
-    fprintf (stdout, "Player 2 is connected!\n");
-
-  /***************************************** 2 *****************************************/
-  // Init and read player 1 name
-  memset (session.player1Name, 0, STRING_LENGTH);
-  msgLength = recv (socketPlayer1, session.player1Name, STRING_LENGTH - 1, 0);
-  
-  // Check read bytes
-  if (msgLength < 0)
-    showError ("ERROR while reading name of player 1");
-  else
-    printf ("Name of player 1 received: %s\n", session.player1Name);
-
-  // Init and read player 2 name
-  memset (session.player2Name, 0, STRING_LENGTH);
-  msgLength = recv (socketPlayer2, session.player2Name, STRING_LENGTH - 1, 0);
-  
-  // Check read bytes
-  if (msgLength < 0)
-    showError ("ERROR while reading name of player 2");
-  else
-    printf ("Name of player 2 received: %s\n", session.player2Name);
-
-  /***************************************** 3 *****************************************/
-  // Initialize and print game session
-  initSession (&session);
-  printSession (&session);
-  endOfGame = FALSE;
-  currentPlayer = player1;
-
-  /***************************************** 4 *****************************************/
-  while (!endOfGame)
+  while (1)
   {
-    if (currentPlayer == player1)
-    {
-      manage_bet (socketPlayer1, &session.player1Stack, &session.player1Bet);
-      manage_bet (socketPlayer2, &session.player2Stack, &session.player2Bet);
-      turn (socketPlayer1, socketPlayer2, &session, &session.player1Deck);
-      turn (socketPlayer2, socketPlayer1, &session, &session.player2Deck);
-    }
+    // Listen
+    listen (socketfd, 2);
+
+    // Get length of player 1 structure
+    clientLength = sizeof (player1Address);
+
+    // Accept
+    socketPlayer1 = accept (socketfd, (struct sockaddr *) &player1Address, &clientLength);
+    if (socketPlayer1 < 0)
+      showError ("ERROR while accepting player 1");
     else
-    {
-      manage_bet (socketPlayer2, &session.player2Stack, &session.player2Bet);
-      manage_bet (socketPlayer1, &session.player1Stack, &session.player1Bet);
-      turn (socketPlayer2, socketPlayer1, &session, &session.player2Deck);
-      turn (socketPlayer1, socketPlayer2, &session, &session.player1Deck);
-    }
+      fprintf(stdout, "Player 1 is connected!\n");
 
-    updateStacks (&session);
+    // Get length of player 2 structure
+    clientLength = sizeof (player2Address);
 
-    if (session.player1Stack == 0)
-    {
-      code = TURN_GAME_LOSE;
-      msgLength = send (socketPlayer1, &code, sizeof (code), 0);
-      if (msgLength < 0)
-        showError ("ERROR while writing code to player.");
-
-      codeRival = TURN_GAME_WIN;
-      msgLength = send (socketPlayer2, &codeRival, sizeof (codeRival), 0);
-      if (msgLength < 0)
-        showError ("ERROR while writing code to player.");
-
-      endOfGame = TRUE;
-
-      // Close sockets
-      close (socketPlayer1);
-      close (socketPlayer2);
-      close (socketfd);
-    }
-    else if (session.player2Stack == 0)
-    {
-      code = TURN_GAME_LOSE;
-      msgLength = send (socketPlayer2, &code, sizeof (code), 0);
-      if (msgLength < 0)
-        showError ("ERROR while writing code to player.");
-
-      codeRival = TURN_GAME_WIN;
-      msgLength = send (socketPlayer1, &codeRival, sizeof (codeRival), 0);
-      if (msgLength < 0)
-        showError ("ERROR while writing code to player.");
-
-      endOfGame = TRUE;
-
-      // Close sockets
-      close (socketPlayer1);
-      close (socketPlayer2);
-      close (socketfd);
-    }
+    // Accept
+    socketPlayer2 = accept (socketfd, (struct sockaddr *) &player2Address, &clientLength);
+    if (socketPlayer2 < 0)
+      showError ("ERROR while accepting player 2");
     else
+      fprintf (stdout, "Player 2 is connected!\n");
+
+    threadArgs = malloc (sizeof (tThreadArgs));
+    threadArgs->socketPlayer1 = socketPlayer1;
+    threadArgs->socketPlayer2 = socketPlayer2;
+    
+    if (pthread_create(&threadID, NULL, threadProcessing, threadArgs) == -1)
     {
-      currentPlayer = getNextPlayer (currentPlayer);
-      clearDeck (&session.gameDeck);
-      initDeck (&session.gameDeck);
-      clearDeck (&session.player1Deck);
-      clearDeck (&session.player2Deck);
-      printSession (&session);
+      showError ("Error creating thread.");
+      exit (1);
     }
   }
+  free (threadArgs);
+  close (socketfd);
 }
