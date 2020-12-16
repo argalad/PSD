@@ -20,7 +20,7 @@
 
 
 // BMP file header
-typedef struct{
+typedef struct {
 	unsigned short bfType;
 	unsigned int bfSize;
 	unsigned short bfReserved1;
@@ -30,7 +30,7 @@ typedef struct{
 
 
 // BMP info header
-typedef struct{
+typedef struct {
 	unsigned int  biSize;
 	unsigned int  biWidth;
 	unsigned int  biHeight;
