@@ -50,21 +50,21 @@ int main(int argc, char** argv)
 	tag = 1;
 	srand (time (NULL));
 
-	// Check the number of processes
-	if (size < 3)
-	{
-		if (rank == 0)
-			printf ("This program must be launched with (at least) 3 processes\n");
-
-		MPI_Finalize ();
-		exit (0);
-	}
-
 	// Check arguments
 	if (argc != 4)
 	{
 		if (rank == 0)
 			printf ("Usage: ./bmpFilterStatic sourceFile destinationFile threshold\n");
+
+		MPI_Finalize ();
+		exit (0);
+	}
+
+	// Check the number of processes
+	if (size < 3)
+	{
+		if (rank == 0)
+			printf ("This program must be launched with (at least) 3 processes\n");
 
 		MPI_Finalize ();
 		exit (0);
@@ -138,7 +138,6 @@ int main(int argc, char** argv)
 		read (inputFile, inputBuffer, rowSize * imgInfoHeaderInput.biHeight);
 
 		auxPtr = inputBuffer;
-		currentRow = 0;
 		
 		// Data delivery
 		int i;
@@ -148,7 +147,7 @@ int main(int argc, char** argv)
 			// Al primer worker se le envían más filas si no fueran divisibles.
 			if (rowsPerProcess - rowsSentToWorker > 0)
 			{
-				if (DEBUG)
+				if (DEBUG_FILTERING)
 					printf ("[Master] sending %d rows to worker %d\n", rowsPerProcess, i);
 
 				MPI_Send (auxPtr, rowSize * rowsPerProcess, MPI_UNSIGNED_CHAR, i, tag, MPI_COMM_WORLD);
@@ -157,7 +156,7 @@ int main(int argc, char** argv)
 			}
 			else
 			{
-				if (DEBUG)
+				if (DEBUG_FILTERING)
 					printf ("[Master] sending %d rows to worker %d\n", rowsPerProcess, i);
 
 				MPI_Send (&rowsPerProcess, 1, MPI_INT, i, tag, MPI_COMM_WORLD);
@@ -171,6 +170,7 @@ int main(int argc, char** argv)
 		// Data reception
 		for (i = 1; i < size; i++)
 		{	
+			// El primer worker puede ser que envíe más filas
 			if (i == 1)
 			{
 				MPI_Recv (outputBuffer, rowSize * (rowsSentToWorker + (imgInfoHeaderInput.biHeight % (size - 1))), 
@@ -185,6 +185,8 @@ int main(int argc, char** argv)
 			}
 		}
 
+		lseek (outputFile, imgFileHeaderInput.bfOffBits, SEEK_SET);
+		write (outputFile, outputBuffer, rowSize * imgInfoHeaderInput.biHeight);
 
 		free(inputBuffer);
 		free(outputBuffer);
@@ -241,15 +243,11 @@ int main(int argc, char** argv)
 					vector[2] = auxPtr[j + 1];
 				}
 
-				outputBuffer[j] = calculatePixelValue (vector, numPixels, threshold, debug);
+				outputBuffer[j] = calculatePixelValue (vector, numPixels, threshold, DEBUG_FILTERING);
 			}
 			auxPtr += rowSize;
 			outputBuffer += rowSize;
 		}
-
-		// Send finish
-		MPI_Send ()
-		MPI_Send (outputBuffer, rowSize * rowsSentToWorker, MPI_CHAR, i, tag, MPI_COMM_WORLD);
 	}
 
 	// Finish MPI environment
