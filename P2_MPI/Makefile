@@ -13,4 +13,4 @@ bmpBlackWhite.o: bmpBlackWhite.c
 	$(CC) -c bmpBlackWhite.c
 	
 clean:
-	rm -f bmpBlackWhite.o bmpFilterStatic
+	rm -f bmpBlackWhite.o bmpFilterStatic bmpFilterDynamic
