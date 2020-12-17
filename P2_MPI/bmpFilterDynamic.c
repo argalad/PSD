@@ -5,7 +5,7 @@
 #define SHOW_LOG_MESSAGES 1
 
 /** Enable output for filtering information */
-#define DEBUG_FILTERING 0
+#define DEBUG_FILTERING 1
 
 /** Show information of input and output bitmap headers */
 #define SHOW_BMP_HEADERS 0
@@ -44,9 +44,10 @@ int main(int argc, char** argv) {
 	MPI_Status status;								/** Status information for received messages */
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 	int* indexTable;								/** Index table */
-	int i,j;											/** Aux variables*/
+	int i,j;										/** Aux variables*/
 	int processedRows;								/** Number of currently processed rows */
 	int totalRows;									/** Number of total rows*/
+	unsigned char* auxPtr2;							/** Auxiliary pointer 2*/
 	////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Init
@@ -130,28 +131,40 @@ int main(int argc, char** argv) {
 
 		// Allocate memory to copy the bytes between the header and the image data(info)
 		outputBuffer = (unsigned char*)malloc((imgFileHeaderInput.bfOffBits - BIMAP_HEADERS_SIZE) * sizeof(unsigned char));
+		if (DEBUG_FILTERING)
+			printf("[MASTER] Memory allocated for outputBuffer.\n");
 
 		// Copy bytes between headers and pixels
 		lseek(inputFile, BIMAP_HEADERS_SIZE, SEEK_SET);
 		read(inputFile, outputBuffer, imgFileHeaderInput.bfOffBits - BIMAP_HEADERS_SIZE);
 		write(outputFile, outputBuffer, imgFileHeaderInput.bfOffBits - BIMAP_HEADERS_SIZE);
+		free(outputBuffer);
+		if (DEBUG_FILTERING)
+			printf("[MASTER] Info data copied into outputFile.\n");
 
-		////////////////////////////////////////////////////////////////////////////////////////////////////
-		//DAR CARGA INICIAL A WORKERS
-		//Distribute work to other processes
+		// Copy image data into buffer
+		inputBuffer = (unsigned char*)malloc(rowSize * imgInfoHeaderInput.biHeight * sizeof(unsigned char*));
+		lseek(inputFile, imgFileHeaderInput.bfOffBits, SEEK_SET);
+		read(inputFile, inputBuffer, rowSize * imgInfoHeaderInput.biHeight);
 		
+		if (DEBUG_FILTERING)
+			printf("[MASTER] Image data copied into inputBuffer.\n");
+
+		//Distribute work to other processes
 		// Init
+		auxPtr = inputBuffer;
 		currentRow = 0;
 		receivedRows = 0;
+		processedRows = 0;
 		indexTable = (int*)malloc(size * sizeof(int)); // Index table (alloc and init)
 		for (i = 0; i < size; i++)
 			indexTable[i] = 0;
 
-		totalRows = (imgInfoHeaderInput.biSizeImage / rowSize);
+		totalRows = imgInfoHeaderInput.biHeight;
 
 		// Check whether at least each worker receives NROWS
-		if (((rowsPerProcess * rowSize)*(size - 1)) > totalRows) {
-			printf("Wrong configuration for NROWS (%d). SIZE (%d) < numWorkers(%d)*NROWS(%d)\n", rowsPerProcess, imgInfoHeaderInput.biSizeImage, size - 1, rowsPerProcess);
+		if ((rowsPerProcess*(size - 1)) > totalRows) {
+			printf("[MASTER] Wrong configuration for NROWS (%d). SIZE (%d) < numWorkers(%d)*NROWS(%d)\n", rowsPerProcess, totalRows, size - 1, rowsPerProcess);
 			printf("At least, each worker must receive %d rows to be processed\n", rowsPerProcess);
 			MPI_Abort(MPI_COMM_WORLD,-1);
 			exit(-1);
@@ -159,46 +172,55 @@ int main(int argc, char** argv) {
 		
 		// Distribute rows...
 		for (i = 1; i < size; i++) {
+			//Send size of row
+			MPI_Send(&rowSize, 1, MPI_INT, i, tag, MPI_COMM_WORLD);
+
 			// Send the number of rows to be processed
 			rowsSentToWorker = rowsPerProcess;
 			MPI_Send(&rowsSentToWorker, 1, MPI_INT, i, tag, MPI_COMM_WORLD);
 
 			// Send the rows data
 			indexTable[i] = currentRow;
-			MPI_Send(auxPtr, rowsSentToWorker * rowSize, MPI_INT, i, tag, MPI_COMM_WORLD);
+			MPI_Send(auxPtr, rowsSentToWorker * rowSize, MPI_UNSIGNED_CHAR, i, tag, MPI_COMM_WORLD);
+			if (DEBUG_FILTERING)
+				printf("[Master] sending %d rows to worker %d. -----------Current row =%d\n", rowsPerProcess, i, currentRow);
 
 			// Update pointer and index
 			currentRow += rowsSentToWorker;
 			auxPtr += (rowsSentToWorker * rowSize);
 		}
+		
+		// Allocate memory to copy the image bytes
+		outputBuffer = (unsigned char*)malloc(rowSize * imgInfoHeaderInput.biHeight);
 
 		// While there are remaining rows...
-		// Allocate memory to copy the image bytes
-		outputBuffer = (unsigned char*)malloc((imgInfoHeaderInput.biSizeImage) * sizeof(unsigned char));
-
 		while (processedRows < totalRows){
 
 			// Receive number of rows
 			MPI_Recv (&rowsSentToWorker, 1, MPI_INT, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
 
 			// Set destination buffer
-			auxPtr = outputBuffer + (indexTable[status.MPI_SOURCE]* rowSize);
+			auxPtr2 = outputBuffer + (indexTable[status.MPI_SOURCE]* rowSize);
 
 			// Receive result data
-			MPI_Recv (auxPtr, rowsSentToWorker * rowSize, MPI_INT, status.MPI_SOURCE, tag, MPI_COMM_WORLD, &status);
+			MPI_Recv (auxPtr2, rowsSentToWorker * rowSize, MPI_UNSIGNED_CHAR, status.MPI_SOURCE, tag, MPI_COMM_WORLD, &status);
 
 			// Update processed rows
 			processedRows += rowsSentToWorker;
+			
+			if (DEBUG_FILTERING)
+				printf("[MASTER] Receiving filtered data (%d rows) from worker %d.\n", rowsSentToWorker,status.MPI_SOURCE);
 
 			// Send remaining rows...
 			if (currentRow < totalRows){
-
 				// Send the number of rows to be processed
 				if ((currentRow+ rowsPerProcess) > totalRows)
 					rowsSentToWorker = totalRows - currentRow;
 				else
 					rowsSentToWorker = rowsPerProcess;
 				
+				if (DEBUG_FILTERING)
+					printf("[Master] sending %d rows to worker %d. -----------Current row =%d\n", rowsSentToWorker, status.MPI_SOURCE, currentRow);
 				//Send size of row
 				MPI_Send(&rowSize, 1, MPI_INT, status.MPI_SOURCE, tag, MPI_COMM_WORLD);
 
@@ -207,18 +229,25 @@ int main(int argc, char** argv) {
 
 				// Send the rows data
 				indexTable[status.MPI_SOURCE] = currentRow;
-				MPI_Send (auxPtr, rowsSentToWorker* rowSize, MPI_INT, status.MPI_SOURCE, tag, MPI_COMM_WORLD);
+				MPI_Send (auxPtr, rowsSentToWorker* rowSize, MPI_UNSIGNED_CHAR, status.MPI_SOURCE, tag, MPI_COMM_WORLD);
 
 				// Update pointer and index
 				currentRow += rowsSentToWorker;
+				
 				auxPtr += (rowsSentToWorker * rowSize);
 			}
 			else{
+				//Send size of row
+				MPI_Send(&rowSize, 1, MPI_INT, status.MPI_SOURCE, tag, MPI_COMM_WORLD);
 				rowsSentToWorker = 0;
 				MPI_Send (&rowsSentToWorker, 1, MPI_INT, status.MPI_SOURCE, tag, MPI_COMM_WORLD);
 			}
 		}
-		///////////////////////////////////////////////////////////////////////////////////////////////////////
+		
+		//Writing image data to outputFile
+		lseek(outputFile, imgFileHeaderInput.bfOffBits, SEEK_SET);
+		write(outputFile, outputBuffer, rowSize * imgInfoHeaderInput.biHeight);
+
 		// Close files
 		close(inputFile);
 		close(outputFile);
@@ -233,24 +262,24 @@ int main(int argc, char** argv) {
 
 	// Worker process
 	else {
-		///////////////////////////////////////////////////////////////////////////////////////////////////////
 			do{
 				// Receive size of row
 				MPI_Recv(&rowSize, 1, MPI_INT, 0, tag, MPI_COMM_WORLD, &status);
 
 				// Receive number of rows
 				MPI_Recv (&rowsSentToWorker, 1, MPI_INT, 0, tag, MPI_COMM_WORLD, &status);
-
+				
+				inputBuffer = (unsigned char*)malloc(rowsSentToWorker * rowSize);
+				
 				// Data arrives to each process
 				printf("[Process %d] Processing %d rows\n", rank, rowsSentToWorker);
 				
 				if (rowsSentToWorker >0){
-					inputBuffer = (unsigned char*)malloc(rowsSentToWorker*rowSize);
-					outputBuffer = (unsigned char*)malloc(rowsSentToWorker * rowSize);
+					
 					// Receive input data
-					MPI_Recv (inputBuffer, rowsSentToWorker* rowSize, MPI_INT, 0, tag, MPI_COMM_WORLD, &status);
+					MPI_Recv (inputBuffer, rowsSentToWorker* rowSize, MPI_UNSIGNED_CHAR, 0, tag, MPI_COMM_WORLD, &status);
 					auxPtr = inputBuffer;
-
+					outputBuffer = (unsigned char*)malloc(rowsSentToWorker * rowSize);
 					// Perform the action
 					for (i = 0; i < rowsSentToWorker; i++)
 					{
@@ -276,19 +305,17 @@ int main(int argc, char** argv) {
 								vector[2] = auxPtr[i * rowSize + j + 1];
 							}
 
-							outputBuffer[i * rowSize + j] = calculatePixelValue(vector, numPixels, threshold, DEBUG_FILTERING);
+							outputBuffer[i * rowSize + j] = calculatePixelValue(vector, numPixels, threshold, 0);
 						}
 					}
 
 					// Send results
 					MPI_Send (&rowsSentToWorker, 1, MPI_INT, 0, tag, MPI_COMM_WORLD);
-					MPI_Send (outputBuffer, rowsSentToWorker* rowSize, MPI_INT, 0, tag, MPI_COMM_WORLD);
+					MPI_Send (outputBuffer, rowsSentToWorker* rowSize, MPI_UNSIGNED_CHAR, 0, tag, MPI_COMM_WORLD);
+					printf("[Process %d] Filtered data sent!\n",rank);
 				}
 
 			}while (rowsSentToWorker >0);
-
-			///////////////////////////////////////////////////////////////////////////////////////////////////////
-
 	}
 
 	// Finish MPI environment
