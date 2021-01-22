@@ -1,0 +1,17 @@
+../../src
+OMNeT++ Discrete Event Simulation  (C) 1992-2014 Andras Varga, OpenSim Ltd.
+Version: 4.6, build: 141202-f785492, edition: Academic Public License -- NOT FOR COMMERCIAL USE
+See the license for distribution terms and warranty disclaimer
+Setting up Cmdenv...
+Loading NED files from ../../src/../simulations: 17
+Loading NED files from ../../src: 59
+Loading NED files from /home/simulation/omnetpp-4.6/projects/inet/src: 275
+
+Preparing for running configuration General, run #0...
+Scenario: $repetition=0
+Assigned runID=General-0-20210121-13:41:46-2345
+Setting up network `s_8serv_2cores'...
+Initializing...
+
+<!> Error: cannot remove old output scalar file `results/General-0.sca': Permission denied.
+

@@ -1,0 +1,3 @@
+2
+rSto2_sRack.nodeBoard[0].node[0]:9500:2000
+rSto2_sRack.nodeBoard[0].node[1]:9500:2001

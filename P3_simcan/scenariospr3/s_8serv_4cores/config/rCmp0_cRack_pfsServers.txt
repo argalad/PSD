@@ -1,0 +1,9 @@
+8
+rSto2_sRack.nodeBoard[0].node[0]:9500:2000
+rSto2_sRack.nodeBoard[0].node[1]:9500:2001
+rSto2_sRack.nodeBoard[0].node[2]:9500:2002
+rSto2_sRack.nodeBoard[0].node[3]:9500:2003
+rSto2_sRack.nodeBoard[0].node[4]:9500:2004
+rSto2_sRack.nodeBoard[0].node[5]:9500:2005
+rSto2_sRack.nodeBoard[0].node[6]:9500:2006
+rSto2_sRack.nodeBoard[0].node[7]:9500:2007
