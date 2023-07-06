@@ -1,5 +1,5 @@
 # PSD
-## Prácticas de la asignatura Programación de Sistemas Distribuidos
+
 ## Práctica 1. Diseño e implementación de un sistema de juegos en línea.
 Se desarrolla tanto la parte cliente como el servidor, para permitir partidas remotas del juego Blackjack, comunicando las partes a través del uso de sockets en C.
 ## Práctica 2. Filtrado de imágenes en un sistema distribuido utilizando MPI
