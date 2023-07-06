@@ -6,3 +6,5 @@ Se desarrolla tanto la parte cliente como el servidor, para permitir partidas re
 Diseño e implementación de un sistema de filtrado de imágenes en un sistema distribuido utilizando MPI. Este sistema realiza un filtrado sobre imágenes bitmap (BMP) en escala de
 grises a blanco y negro.
 Dos versiones: procesando los datos de manera estática y de manera dinámica.
+
+## Práctica 3. Evaluación del rendimiento en entornos distribuidos utilizando la plataforma de simulación SIMCAN
